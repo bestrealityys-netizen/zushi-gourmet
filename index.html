@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>逗子グルメ｜逗子駅から歩いて行ける海街の名店</title>
+<meta name="description" content="逗子駅（JR・京急 逗子・葉山）から歩いて行ける名店を、地図・シーン絞り込み・距離順で探せる海街グルメガイド。">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{--navy:#0d3b66;--sea:#1d7a8c;--sand:#f4efe6;--ink:#1f2a30;--mut:#6b7b82;--card:#fff;--line:#e3ddd0;--accent:#e08e45;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:var(--ink);background:var(--sand);line-height:1.7}
+  a{color:inherit}
+  header{background:linear-gradient(135deg,var(--navy),var(--sea));color:#fff;padding:34px 20px 28px;text-align:center}
+  header h1{font-size:26px;letter-spacing:.04em}
+  header p{margin-top:8px;font-size:13px;opacity:.92}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+  #map{height:360px;border-radius:14px;margin:18px 0;box-shadow:0 2px 12px rgba(13,59,102,.12);z-index:1}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px}
+  .controls .lbl{font-size:12px;color:var(--mut);margin-right:4px}
+  .chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--sea)}
+  .chip.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+  .sortbar{display:flex;gap:8px;align-items:center;margin:10px 0 2px;font-size:13px;color:var(--mut)}
+  select{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .count{font-size:12.5px;color:var(--mut);margin:8px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding-bottom:40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 17px;display:flex;flex-direction:column;gap:7px;box-shadow:0 1px 5px rgba(0,0,0,.03)}
+  .card .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .card h3{font-size:17px;line-height:1.35}
+  .rate{white-space:nowrap;font-size:13px;color:var(--accent);font-weight:700}
+  .rate small{color:var(--mut);font-weight:400}
+  .meta{font-size:12.5px;color:var(--mut)}
+  .dist{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;margin-right:6px}
+  .genre{display:inline-block;background:var(--sand);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:11.5px}
+  .summary{font-size:13.5px}
+  .sig{font-size:12.5px;color:var(--sea);font-weight:700}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+  .tag{font-size:11px;background:#eef4f5;color:var(--sea);border-radius:5px;padding:2px 7px}
+  .award{font-size:11px;color:var(--accent);font-weight:700}
+  .links{margin-top:4px;font-size:12.5px}
+  .links a{color:var(--sea);text-decoration:none;border-bottom:1px solid currentColor}
+  footer{background:var(--navy);color:#cfe0ea;font-size:12px;text-align:center;padding:22px 16px}
+  .updates{font-size:11.5px;color:var(--mut);margin:4px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>逗子グルメ 海街の名店</h1>
+    <p>逗子駅（JR横須賀線／京急 逗子・葉山）から歩いて行ける名店を、地図・シーン・距離順で。</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="map"></div>
+
+  <div class="controls" id="tagbar">
+    <span class="lbl">シーンで絞り込み</span>
+  </div>
+
+  <div class="sortbar">
+    <label>並び替え：
+      <select id="sort">
+        <option value="dist">逗子駅から近い順</option>
+        <option value="rate">評価が高い順</option>
+      </select>
+    </label>
+    <button class="chip" id="reset">条件クリア</button>
+  </div>
+
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>逗子グルメ 海街の名店｜基準＝逗子駅（lat35.2956, lng139.5797）。距離は逗子駅からの徒歩分（概算）。</div>
+    <div class="updates" id="updates"></div>
+    <div style="margin-top:8px">出典：食べログ等の口コミ。点数・営業情報は変動するため最新は各店公式・食べログをご確認ください。</div>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const DATA = {"meta": {"generated_at": "2026-06-20", "updates": [{"date": "2026-06-19", "angle": "初版／駅近×総合", "note": "逗子駅（JR／京急 逗子・葉山）徒歩圏を中心に、食べログ逗子・葉山ランキング上位の確かな名店と、海街らしい海鮮・海岸テラスのカフェを距離順に17件収録。点数・口コミ数は2026年6月時点の食べログ準拠、海カフェ等は点数不明のためnull。"}, {"date": "2026-06-20", "angle": "海鮮・しらす（地魚・生しらす）", "note": "逗子駅徒歩圏の地魚・しらす名店を3件追加（はら田・さかな食堂・あっかんべー）。魚佐の紹介文・タグを加筆。"}]}, "restaurants": [{"id": "spice-tree", "name": "スパイス・ツリー", "genre": "カレー", "distance_min": 3, "rating": 3.81, "rating_source": "食べログ", "reviews": 531, "price_dinner": "￥2,000～￥2,999", "price_lunch": "￥1,000～￥1,999", "closed": null, "address": "逗子市逗子1丁目", "lat": 35.2952, "lng": 139.5789, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14053565/", "awards": ["カレー百名店 2026"], "summary": "逗子駅前商店街にある本格スパイスカレーの人気店。逗子・葉山エリアの食べログ総合1位常連。", "signature": "スパイスたっぷりのエビカニカレー", "review": "「シーフード好きならエビカニカレーはマストイート」と評される、香り高い一皿。", "scene_tags": ["カレー", "行列・人気店", "駅近ランチ"]}, {"id": "sushi-hara", "name": "すし 波良", "genre": "寿司", "distance_min": 4, "rating": 3.73, "rating_source": "食べログ", "reviews": 50, "price_dinner": "￥20,000～￥29,999", "price_lunch": null, "closed": null, "address": "逗子市逗子2丁目", "lat": 35.2958, "lng": 139.5806, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14076751/", "awards": ["寿司百名店 2025"], "summary": "アットホームな雰囲気の大人の隠れ家寿司。逗子で味わう寿司百名店。", "signature": "地物を含むおまかせ握り", "review": "「至福のひとときに包まれる、大人の隠れ家」と評判のカウンター。", "scene_tags": ["寿司", "特別な日", "大人の隠れ家"]}, {"id": "sou-plus", "name": "sou+", "genre": "イタリアン", "distance_min": 4, "rating": 3.72, "rating_source": "食べログ", "reviews": 49, "price_dinner": "￥8,000～￥9,999", "price_lunch": null, "closed": null, "address": "逗子市逗子", "lat": 35.2953, "lng": 139.5811, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14093451/", "awards": [], "summary": "シンプルながら洗練された一皿が並ぶ、逗子の実力派イタリアン。", "signature": "旬の地場食材を使ったコース", "review": "「シンプルながらも圧倒的に洗練された一皿」とリピーターが絶賛。", "scene_tags": ["イタリアン", "デート", "記念日"]}, {"id": "okamura-soba", "name": "手打蕎麦おかむら", "genre": "そば", "distance_min": 12, "rating": 3.7, "rating_source": "食べログ", "reviews": 317, "price_dinner": "￥1,000～￥1,999", "price_lunch": "￥2,000～￥2,999", "closed": null, "address": "逗子市桜山", "lat": 35.2925, "lng": 139.5835, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14003147/", "awards": [], "summary": "京急 逗子・葉山駅側、桜山エリアの手打ち蕎麦の名店。", "signature": "手打ちのせいろ蕎麦", "review": "コシのある手打ち蕎麦と丁寧な天ぷらで地元に長く愛される一軒。", "scene_tags": ["そば", "海街さんぽ", "落ち着く"]}, {"id": "la-maree", "name": "レストラン ラ・マーレ", "genre": "フレンチ", "distance_min": 22, "rating": 3.69, "rating_source": "食べログ", "reviews": 1041, "price_dinner": "￥3,000～￥3,999", "price_lunch": "￥2,000～￥2,999", "closed": null, "address": "葉山町堀内（渚橋）", "lat": 35.2855, "lng": 139.574, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14000742/", "awards": ["フレンチ百名店 2025"], "summary": "逗子湾を望む渚橋のフレンチ。海に浮かぶようなロケーションが名物。", "signature": "逗子湾を望むランチコース", "review": "「逗子湾の青と空の青と素敵なランチ」と海辺の絶景が口コミで人気。", "scene_tags": ["海岸テラス・サンセット", "オーシャンビュー", "記念日"]}, {"id": "seroriya", "name": "せろりや", "genre": "中華料理", "distance_min": 3, "rating": 3.69, "rating_source": "食べログ", "reviews": 168, "price_dinner": "￥4,000～￥4,999", "price_lunch": "￥1,000～￥1,999", "closed": null, "address": "逗子市逗子5丁目", "lat": 35.2951, "lng": 139.5801, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14057043/", "awards": ["中国料理百名店 2026"], "summary": "野菜を主役にした「Vegetable Chinese」。逗子駅至近の中国料理百名店。", "signature": "季節野菜を使ったコース", "review": "野菜中華という独自のスタイルで全国百名店に名を連ねる人気店。", "scene_tags": ["中華", "ヘルシー", "駅近ランチ"]}, {"id": "boulangerie-es", "name": "ブーランジェリー エス", "genre": "パン", "distance_min": 8, "rating": 3.66, "rating_source": "食べログ", "reviews": 276, "price_dinner": null, "price_lunch": "～￥999", "closed": "日曜・月曜", "address": "逗子市逗子7-6-31", "lat": 35.299, "lng": 139.5818, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14008269/", "awards": ["パン百名店 2022"], "summary": "海ピクニックのお供にも人気の、ハイクオリティなベーカリー。", "signature": "ハード系を中心とした焼きたてパン", "review": "「偶然見つけたハイクオリティベーカリー」と評されるパン百名店。", "scene_tags": ["パン・テイクアウト", "海街さんぽ", "手土産"]}, {"id": "hamura-tempura", "name": "葉むら", "genre": "天ぷら", "distance_min": 5, "rating": 3.64, "rating_source": "食べログ", "reviews": 70, "price_dinner": "￥10,000～￥14,999", "price_lunch": null, "closed": null, "address": "逗子市逗子（京急 逗子・葉山駅近く）", "lat": 35.2939, "lng": 139.5807, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14000311/", "awards": [], "summary": "京急 逗子・葉山駅近く、揚げたてを供するカウンター天ぷら。", "signature": "おまかせ天ぷらコース", "review": "席数を絞った落ち着いた空間で味わう、特別な日の天ぷら。", "scene_tags": ["天ぷら", "特別な日", "大人の隠れ家"]}, {"id": "hikonoya-tonkatsu", "name": "とんかつ ひこのや", "genre": "とんかつ", "distance_min": 6, "rating": 3.63, "rating_source": "食べログ", "reviews": 254, "price_dinner": "￥3,000～￥3,999", "price_lunch": "￥2,000～￥2,999", "closed": null, "address": "逗子市山の根1-1-32", "lat": 35.2965, "lng": 139.5832, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14084035/", "awards": [], "summary": "塩で味わうこだわりのとんかつ。逗子駅東側・山の根の人気店。", "signature": "塩で味わう厚切りとんかつ", "review": "良質な豚と揚げの技で、塩でいただく一枚が評判の行列店。", "scene_tags": ["とんかつ", "行列・人気店", "定食・ランチ"]}, {"id": "fruhling", "name": "フリューリング", "genre": "ケーキ", "distance_min": 10, "rating": 3.63, "rating_source": "食べログ", "reviews": 153, "price_dinner": null, "price_lunch": null, "closed": null, "address": "逗子市山の根", "lat": 35.297, "lng": 139.5842, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14051665/", "awards": ["スイーツ百名店 2023"], "summary": "味・雰囲気・接客がそろう、逗子のスイーツ百名店。", "signature": "季節のケーキ", "review": "「味・雰囲気・接客◎」と三拍子そろった評価のケーキ店。", "scene_tags": ["スイーツ・カフェ", "手土産", "落ち着く"]}, {"id": "uosa", "name": "魚佐", "genre": "食堂・海鮮", "distance_min": 3, "rating": 3.56, "rating_source": "食べログ", "reviews": 426, "price_dinner": "￥2,000～￥2,999", "price_lunch": "￥2,000～￥2,999", "closed": null, "address": "逗子市逗子1丁目", "lat": 35.2948, "lng": 139.5793, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14002849/", "awards": [], "summary": "新鮮な刺身とアジフライが名物の、逗子駅前の人気海鮮食堂。", "signature": "ミックスフライ定食・新鮮な刺身", "review": "「アジフライを求めて再訪」「新鮮な刺身」と評される、相模湾の地魚が光る駅前の人気海鮮食堂。", "scene_tags": ["海鮮・しらす", "定食・ランチ", "行列・人気店", "コスパ"]}, {"id": "cafe-sangogo", "name": "カフェ三三五五", "genre": "カフェ", "distance_min": 5, "rating": null, "rating_source": null, "reviews": null, "price_dinner": null, "price_lunch": "￥1,000～￥1,999", "closed": null, "address": "逗子市逗子", "lat": 35.295, "lng": 139.581, "tabelog_url": null, "awards": [], "summary": "逗子駅徒歩5分、沖縄テイストのカフェ。沖縄料理中心のランチが楽しめる。", "signature": "沖縄テイストのランチプレート", "review": "肩肘張らない雰囲気で、のんびり過ごせる海街のカフェ。", "scene_tags": ["カフェ", "ランチ", "個性派"]}, {"id": "ovens", "name": "OVEN'S", "genre": "カフェ・ベーカリー", "distance_min": 10, "rating": null, "rating_source": null, "reviews": null, "price_dinner": null, "price_lunch": null, "closed": "水曜・木曜", "address": "逗子市久木3-11-2", "lat": 35.298, "lng": 139.5868, "tabelog_url": null, "awards": [], "summary": "久木エリアの焼きたてパンとコーヒーが評判のベーカリーカフェ。", "signature": "焼きたてパンとコーヒー", "review": "朝8時から開く、散歩途中に立ち寄りたい街のカフェ。", "scene_tags": ["カフェ", "海街さんぽ", "テイクアウト"]}, {"id": "cinema-amigo", "name": "CINEMA AMIGO", "genre": "カフェ", "distance_min": 13, "rating": null, "rating_source": null, "reviews": null, "price_dinner": null, "price_lunch": null, "closed": null, "address": "逗子市新宿1-5-14", "lat": 35.292, "lng": 139.5792, "tabelog_url": null, "awards": [], "summary": "ミニシアターを併設した個性派カフェ。映画と一杯を楽しむ海街の名物スポット。", "signature": "映画とドリンク", "review": "京急 逗子・葉山駅から海へ向かう途中にある、唯一無二のカルチャーカフェ。", "scene_tags": ["カフェ", "海街さんぽ", "個性派"]}, {"id": "surfers", "name": "surfers（サーファーズ）", "genre": "カフェ", "distance_min": 25, "rating": null, "rating_source": null, "reviews": null, "price_dinner": null, "price_lunch": null, "closed": null, "address": "逗子市新宿5-822-2", "lat": 35.288, "lng": 139.5762, "tabelog_url": null, "awards": [], "summary": "崖の上に建つ絶景テラスカフェ。海と空と水平線を一望できる。", "signature": "オーシャンビューのテラス席", "review": "「自分が壮大な景色の一部になったよう」と評される開放的なテラス。要事前予約。", "scene_tags": ["海岸テラス・サンセット", "オーシャンビュー", "カフェ"]}, {"id": "malibu-farm", "name": "マリブファーム 逗子マリーナ", "genre": "カリフォルニア料理", "distance_min": 30, "rating": null, "rating_source": null, "reviews": null, "price_dinner": null, "price_lunch": null, "closed": null, "address": "逗子市小坪（リビエラ逗子マリーナ）", "lat": 35.296, "lng": 139.568, "tabelog_url": null, "awards": [], "summary": "逗子マリーナのテラスから江ノ島・富士山・パームツリーを望むカリフォルニアダイニング。", "signature": "オーシャンビューのテラスダイニング", "review": "LAを思わせるパームツリーとマリーナの景色が楽しめる、特別感あるロケーション。", "scene_tags": ["海岸テラス・サンセット", "オーシャンビュー", "デート"]}, {"id": "marche-bredor", "name": "ブレドール 葉山本店", "genre": "パン", "distance_min": 28, "rating": 3.67, "rating_source": "食べログ", "reviews": 612, "price_dinner": "￥2,000～￥2,999", "price_lunch": "～￥999", "closed": null, "address": "葉山町一色（逗子駅からバス）", "lat": 35.272, "lng": 139.581, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14002514/", "awards": ["パン百名店 2022"], "summary": "葉山の老舗ベーカリー。逗子駅からは少し離れるが、海街ドライブの定番。", "signature": "レーズン食パン", "review": "「一番好きな食パン」と評されるパン百名店。海ピクニックの手土産に。", "scene_tags": ["パン・テイクアウト", "海街さんぽ", "手土産"]}, {"id": "harada", "name": "日本料理 はら田", "genre": "日本料理・海鮮", "distance_min": 2, "rating": 3.46, "rating_source": "食べログ", "reviews": null, "price_dinner": "￥3,000～￥3,999", "price_lunch": "￥1,000～￥1,999", "closed": null, "address": "逗子市逗子5-2-51", "lat": 35.2952, "lng": 139.58, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14013879/", "awards": [], "summary": "逗子駅徒歩2分、地物にこだわる和食店。小坪・長井の鯵・鰯・しらす、三崎のまぐろが並ぶ。", "signature": "名物のかきあげ丼／三点盛りの地魚刺身", "review": "ランチは行列ができることも多い、地魚と揚げたてかきあげが評判の一軒。", "scene_tags": ["海鮮・しらす", "定食・ランチ", "駅近ランチ"]}, {"id": "sakana-shokudo", "name": "浜焼き居酒屋 さかな食堂", "genre": "居酒屋・海鮮", "distance_min": 1, "rating": 3.44, "rating_source": "食べログ", "reviews": 223, "price_dinner": "￥3,000～￥3,999", "price_lunch": "￥1,000～￥1,999", "closed": null, "address": "逗子市逗子2-6-31 魚佐次ビル3F", "lat": 35.2958, "lng": 139.5803, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14063721/", "awards": [], "summary": "JR逗子駅徒歩1分。100年以上の老舗魚屋『魚佐次』から仕入れる長井漁港の地魚を、浜焼きと極上刺身で。", "signature": "その場で焼く浜焼き／長井漁港の地魚刺身", "review": "鮮度抜群の地魚を浜焼きで楽しめる、月替わりの日本酒もそろう海鮮酒場。", "scene_tags": ["海鮮・しらす", "浜焼き", "一人飲み"]}, {"id": "akkanbe", "name": "おでん酒場 あっかんべー", "genre": "居酒屋・おでん", "distance_min": 2, "rating": null, "rating_source": null, "reviews": null, "price_dinner": "￥3,000～￥3,999", "price_lunch": null, "closed": null, "address": "逗子市逗子（亀岡八幡宮向かい・カサハラビル3F）", "lat": 35.2962, "lng": 139.5808, "tabelog_url": "https://tabelog.com/kanagawa/A1406/A140602/14048203/", "awards": [], "summary": "出汁のしみたおでんと、地元小坪の新鮮な魚・地野菜が自慢。生しらすの刺身も。逗子駅・逗子葉山駅から徒歩2分。", "signature": "地産地消のおでん／小坪の地魚・生しらす", "review": "逗子市民御用達のにぎわう創作居酒屋。出汁のおでんと地魚で一献。", "scene_tags": ["海鮮・しらす", "一人飲み", "居酒屋"]}]};
+const ZUSHI = [35.2956, 139.5797];
+let activeTags = new Set();
+let sortMode = "dist";
+
+// シーンタグ一覧
+const allTags = [...new Set(DATA.restaurants.flatMap(r => r.scene_tags||[]))];
+const tagbar = document.getElementById('tagbar');
+allTags.forEach(t => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = t;
+  b.onclick = () => { b.classList.toggle('on'); activeTags.has(t)?activeTags.delete(t):activeTags.add(t); render(); };
+  b.dataset.tag = t; tagbar.appendChild(b);
+});
+document.getElementById('sort').onchange = e => { sortMode = e.target.value; render(); };
+document.getElementById('reset').onclick = () => {
+  activeTags.clear(); document.querySelectorAll('#tagbar .chip').forEach(c=>c.classList.remove('on')); render();
+};
+
+// 地図
+const map = L.map('map').setView(ZUSHI, 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+L.circleMarker(ZUSHI,{radius:7,color:'#0d3b66',fillColor:'#0d3b66',fillOpacity:1})
+  .addTo(map).bindPopup('<b>逗子駅</b>（基準点）');
+let markers = [];
+
+function filtered(){
+  let list = DATA.restaurants.filter(r =>
+    activeTags.size===0 || (r.scene_tags||[]).some(t=>activeTags.has(t)));
+  list.sort((a,b)=>{
+    if(sortMode==='rate'){ return (b.rating??-1)-(a.rating??-1); }
+    return (a.distance_min??999)-(b.distance_min??999);
+  });
+  return list;
+}
+
+function card(r){
+  const rate = r.rating!=null
+    ? `<span class="rate">★${r.rating.toFixed(2)} <small>(${r.reviews??'-'}件)</small></span>`
+    : `<span class="rate"><small>点数情報なし</small></span>`;
+  const price = [r.price_lunch?`昼 ${r.price_lunch}`:'', r.price_dinner?`夜 ${r.price_dinner}`:''].filter(Boolean).join(' / ');
+  const awards = (r.awards||[]).map(a=>`<span class="award">🏅${a}</span>`).join(' ');
+  const tags = (r.scene_tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
+  const tbl = r.tabelog_url?`<a href="${r.tabelog_url}" target="_blank" rel="noopener">食べログ →</a>`:'';
+  const closed = r.closed?`<span class="meta">／定休：${r.closed}</span>`:'';
+  return `<div class="card">
+    <div class="top"><h3>${r.name}</h3>${rate}</div>
+    <div class="meta"><span class="dist">徒歩${r.distance_min}分</span><span class="genre">${r.genre}</span> ${awards}</div>
+    <div class="summary">${r.summary||''}</div>
+    ${r.signature?`<div class="sig">名物：${r.signature}</div>`:''}
+    <div class="meta">${r.address||''}${closed}</div>
+    ${price?`<div class="meta">${price}</div>`:''}
+    <div class="tags">${tags}</div>
+    <div class="links">${tbl}</div>
+  </div>`;
+}
+
+function render(){
+  const list = filtered();
+  document.getElementById('grid').innerHTML = list.map(card).join('');
+  document.getElementById('count').textContent = `${list.length}件を表示中（全${DATA.restaurants.length}件）`;
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  list.forEach(r=>{
+    if(r.lat==null||r.lng==null) return;
+    const m = L.marker([r.lat,r.lng]).addTo(map)
+      .bindPopup(`<b>${r.name}</b><br>徒歩${r.distance_min}分・${r.genre}${r.rating!=null?`<br>★${r.rating.toFixed(2)}`:''}`);
+    markers.push(m);
+  });
+}
+
+// 更新履歴
+document.getElementById('updates').textContent =
+  '更新履歴：' + (DATA.meta.updates||[]).map(u=>`${u.date}（${u.angle}）`).join('｜') + `／生成日 ${DATA.meta.generated_at}`;
+
+render();
+</script>
+</body>
+</html>

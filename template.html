@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>逗子グルメ｜逗子駅から歩いて行ける海街の名店</title>
+<meta name="description" content="逗子駅（JR・京急 逗子・葉山）から歩いて行ける名店を、地図・シーン絞り込み・距離順で探せる海街グルメガイド。">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{--navy:#0d3b66;--sea:#1d7a8c;--sand:#f4efe6;--ink:#1f2a30;--mut:#6b7b82;--card:#fff;--line:#e3ddd0;--accent:#e08e45;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;color:var(--ink);background:var(--sand);line-height:1.7}
+  a{color:inherit}
+  header{background:linear-gradient(135deg,var(--navy),var(--sea));color:#fff;padding:34px 20px 28px;text-align:center}
+  header h1{font-size:26px;letter-spacing:.04em}
+  header p{margin-top:8px;font-size:13px;opacity:.92}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+  #map{height:360px;border-radius:14px;margin:18px 0;box-shadow:0 2px 12px rgba(13,59,102,.12);z-index:1}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px}
+  .controls .lbl{font-size:12px;color:var(--mut);margin-right:4px}
+  .chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;transition:.15s}
+  .chip:hover{border-color:var(--sea)}
+  .chip.on{background:var(--sea);color:#fff;border-color:var(--sea)}
+  .sortbar{display:flex;gap:8px;align-items:center;margin:10px 0 2px;font-size:13px;color:var(--mut)}
+  select{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .count{font-size:12.5px;color:var(--mut);margin:8px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding-bottom:40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 17px;display:flex;flex-direction:column;gap:7px;box-shadow:0 1px 5px rgba(0,0,0,.03)}
+  .card .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .card h3{font-size:17px;line-height:1.35}
+  .rate{white-space:nowrap;font-size:13px;color:var(--accent);font-weight:700}
+  .rate small{color:var(--mut);font-weight:400}
+  .meta{font-size:12.5px;color:var(--mut)}
+  .dist{display:inline-block;background:var(--navy);color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;margin-right:6px}
+  .genre{display:inline-block;background:var(--sand);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:11.5px}
+  .summary{font-size:13.5px}
+  .sig{font-size:12.5px;color:var(--sea);font-weight:700}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:3px}
+  .tag{font-size:11px;background:#eef4f5;color:var(--sea);border-radius:5px;padding:2px 7px}
+  .award{font-size:11px;color:var(--accent);font-weight:700}
+  .links{margin-top:4px;font-size:12.5px}
+  .links a{color:var(--sea);text-decoration:none;border-bottom:1px solid currentColor}
+  footer{background:var(--navy);color:#cfe0ea;font-size:12px;text-align:center;padding:22px 16px}
+  .updates{font-size:11.5px;color:var(--mut);margin:4px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>逗子グルメ 海街の名店</h1>
+    <p>逗子駅（JR横須賀線／京急 逗子・葉山）から歩いて行ける名店を、地図・シーン・距離順で。</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="map"></div>
+
+  <div class="controls" id="tagbar">
+    <span class="lbl">シーンで絞り込み</span>
+  </div>
+
+  <div class="sortbar">
+    <label>並び替え：
+      <select id="sort">
+        <option value="dist">逗子駅から近い順</option>
+        <option value="rate">評価が高い順</option>
+      </select>
+    </label>
+    <button class="chip" id="reset">条件クリア</button>
+  </div>
+
+  <div class="count" id="count"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div>逗子グルメ 海街の名店｜基準＝逗子駅（lat35.2956, lng139.5797）。距離は逗子駅からの徒歩分（概算）。</div>
+    <div class="updates" id="updates"></div>
+    <div style="margin-top:8px">出典：食べログ等の口コミ。点数・営業情報は変動するため最新は各店公式・食べログをご確認ください。</div>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const DATA = __DATA__;
+const ZUSHI = [35.2956, 139.5797];
+let activeTags = new Set();
+let sortMode = "dist";
+
+// シーンタグ一覧
+const allTags = [...new Set(DATA.restaurants.flatMap(r => r.scene_tags||[]))];
+const tagbar = document.getElementById('tagbar');
+allTags.forEach(t => {
+  const b = document.createElement('button');
+  b.className = 'chip'; b.textContent = t;
+  b.onclick = () => { b.classList.toggle('on'); activeTags.has(t)?activeTags.delete(t):activeTags.add(t); render(); };
+  b.dataset.tag = t; tagbar.appendChild(b);
+});
+document.getElementById('sort').onchange = e => { sortMode = e.target.value; render(); };
+document.getElementById('reset').onclick = () => {
+  activeTags.clear(); document.querySelectorAll('#tagbar .chip').forEach(c=>c.classList.remove('on')); render();
+};
+
+// 地図
+const map = L.map('map').setView(ZUSHI, 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:19, attribution:'&copy; OpenStreetMap'}).addTo(map);
+L.circleMarker(ZUSHI,{radius:7,color:'#0d3b66',fillColor:'#0d3b66',fillOpacity:1})
+  .addTo(map).bindPopup('<b>逗子駅</b>（基準点）');
+let markers = [];
+
+function filtered(){
+  let list = DATA.restaurants.filter(r =>
+    activeTags.size===0 || (r.scene_tags||[]).some(t=>activeTags.has(t)));
+  list.sort((a,b)=>{
+    if(sortMode==='rate'){ return (b.rating??-1)-(a.rating??-1); }
+    return (a.distance_min??999)-(b.distance_min??999);
+  });
+  return list;
+}
+
+function card(r){
+  const rate = r.rating!=null
+    ? `<span class="rate">★${r.rating.toFixed(2)} <small>(${r.reviews??'-'}件)</small></span>`
+    : `<span class="rate"><small>点数情報なし</small></span>`;
+  const price = [r.price_lunch?`昼 ${r.price_lunch}`:'', r.price_dinner?`夜 ${r.price_dinner}`:''].filter(Boolean).join(' / ');
+  const awards = (r.awards||[]).map(a=>`<span class="award">🏅${a}</span>`).join(' ');
+  const tags = (r.scene_tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
+  const tbl = r.tabelog_url?`<a href="${r.tabelog_url}" target="_blank" rel="noopener">食べログ →</a>`:'';
+  const closed = r.closed?`<span class="meta">／定休：${r.closed}</span>`:'';
+  return `<div class="card">
+    <div class="top"><h3>${r.name}</h3>${rate}</div>
+    <div class="meta"><span class="dist">徒歩${r.distance_min}分</span><span class="genre">${r.genre}</span> ${awards}</div>
+    <div class="summary">${r.summary||''}</div>
+    ${r.signature?`<div class="sig">名物：${r.signature}</div>`:''}
+    <div class="meta">${r.address||''}${closed}</div>
+    ${price?`<div class="meta">${price}</div>`:''}
+    <div class="tags">${tags}</div>
+    <div class="links">${tbl}</div>
+  </div>`;
+}
+
+function render(){
+  const list = filtered();
+  document.getElementById('grid').innerHTML = list.map(card).join('');
+  document.getElementById('count').textContent = `${list.length}件を表示中（全${DATA.restaurants.length}件）`;
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  list.forEach(r=>{
+    if(r.lat==null||r.lng==null) return;
+    const m = L.marker([r.lat,r.lng]).addTo(map)
+      .bindPopup(`<b>${r.name}</b><br>徒歩${r.distance_min}分・${r.genre}${r.rating!=null?`<br>★${r.rating.toFixed(2)}`:''}`);
+    markers.push(m);
+  });
+}
+
+// 更新履歴
+document.getElementById('updates').textContent =
+  '更新履歴：' + (DATA.meta.updates||[]).map(u=>`${u.date}（${u.angle}）`).join('｜') + `／生成日 ${DATA.meta.generated_at}`;
+
+render();
+</script>
+</body>
+</html>
